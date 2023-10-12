@@ -116,7 +116,7 @@ JUMP_THRESHOLD = int(HEIGHT * 0.9)
 def main():
     while True:
         ret, frame = video.read()
-
+        """If your webcam flips the image, remove the following line of code:"""
         frame = cv2.flip(frame, 1)
         results = pose.process(frame)
 
@@ -135,7 +135,7 @@ def main():
             mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
             player.STANCE = check_stance()
             detect_pose(frame)
-        """If your webcam flips the image, remove the following line of code:"""
+        
 
         cv2.imshow('frame', frame)
 
