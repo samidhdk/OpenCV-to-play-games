@@ -1,5 +1,5 @@
 # Work in progress
-Currently uploading the proyect. I'll probably use threading or a convolutional neural network to give a better performance and user experience.
+Currently uploading the proyect. I'll probably use a LSTM to give a better performance and user experience.
 
 ## Some context
 The main idea is to simulate something like Xbox Kinect. 
