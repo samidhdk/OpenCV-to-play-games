@@ -3,6 +3,7 @@ import keras.src.distribute.saved_model_test_base
 import numpy as np
 import os
 import mediapipe as mp
+import pygetwindow as gw
 from sklearn.model_selection import train_test_split
 from keras.utils import to_categorical
 from keras.models import Sequential
@@ -167,6 +168,8 @@ def create_data_folders():
 
 
 def test():
+    window_title_to_focus = "Street Fighter 6 Demo"
+    focus_on_application(window_title_to_focus)
     player = Player(HEIGHT=HEIGHT, WIDTH=WIDTH)
     sequence = deque(maxlen=sequences_length)
     threshold = 0.95
@@ -199,12 +202,14 @@ def test():
                 # Predict logic
                 keypoints = extract_keypoints(results)
                 check_stance(player)
-                detect_pose(player)
+                check_movement(player)
+                if player.cd <= 13:
+                    player.cd += 1
+
+                sequence.append(keypoints)
+                print(len(sequence))
+
                 if sum(keypoints) != 0 and player.movement == 0 and player.STANCE == 0:
-
-                    sequence.append(keypoints)
-                    print(len(sequence))
-
                     if len(sequence) == sequences_length:
 
                         res = model.predict(np.expand_dims(sequence, axis=0))[0]
@@ -216,15 +221,13 @@ def test():
 
                         if res[np.argmax(res)] > threshold:
                             respuesta = str(actions[np.argmax(res)])
-
-
+                            check_action(player, respuesta)
                         else:
                             respuesta = ""
 
                         cv2.rectangle(image, (0, 0), (320, 40), (245, 117, 16), -1)
                         cv2.putText(image, respuesta, (3, 30),
                                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
             cv2.imshow('LSTM', image)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -237,62 +240,67 @@ def check_stance(player):
         print("CROUCHING!")
         if player.STANCE != 1:
             player.STANCE = 1
-            #player.crouch()
+            player.crouch()
 
     elif player.R_KNEE.y * HEIGHT < HEIGHT * 0.9 and player.L_KNEE.y * HEIGHT < HEIGHT * 0.9:
     #elif player.MIDDLE_CHEST_Y < int(JUMP_THRESHOLD - 300):
         print("JUMPING!")
         if player.STANCE != 2:
             player.STANCE = 2
-            #player.jump()
+            player.jump()
     else:
         print("NEUTRAL!")
         if player.STANCE != 0:
             player.STANCE = 0
-            #player.neutral()
+            player.neutral()
 
-def detect_pose(player):
+def check_movement(player):
     # neutral stance
     if player.STANCE == 0:
-        """
-        if player.R_ELBOW.y < player.R_SHOULDER.y and player.L_ELBOW.y < player.L_SHOULDER.y:
-            print("HEAVY PUNCH!")
-            player.heavy_punch()
-
-        elif (
-                int(player.L_SHOULDER.y * 0.9) < player.L_ELBOW.y < int(
-            player.L_SHOULDER.y * 1.1) or player.L_ELBOW.y < player.L_SHOULDER.y) and (
-                player.L_ELBOW.y < player.R_ELBOW.y):
-            print("LIGHT PUNCH!")
-            player.light_punch()
-        elif (
-                int(player.R_SHOULDER.y * 0.9) < player.R_ELBOW.y < int(
-            player.R_SHOULDER.y * 1.1) or player.R_ELBOW.y < player.R_SHOULDER.y) and (
-                player.R_ELBOW.y < player.L_ELBOW.y):
-            print("MEDIUM PUNCH!")
-            player.medium_punch()
-        """
         if (LEFT_MARGIN_THRESHOLD < player.L_EAR.x * WIDTH < player.R_EAR.x * WIDTH < RIGHT_MARGIN_THRESHOLD
               and LEFT_MARGIN_THRESHOLD < player.MIDDLE_CHEST_X < RIGHT_MARGIN_THRESHOLD):
             if player.movement != MD_STAND:
                 player.movement = MD_STAND
-                #player.stand()
+                player.stand()
                 print("STAND")
 
         elif (player.L_EAR.x * WIDTH < player.R_EAR.x * WIDTH < LEFT_MARGIN_THRESHOLD
               and player.MIDDLE_CHEST_X < LEFT_MARGIN_THRESHOLD):
             if player.movement != MD_LEFT:
                 player.movement = MD_LEFT
-                #player.move_left()
+                player.move_left()
                 print("MOVE LEFT")
         elif (player.R_EAR.x * WIDTH > player.L_EAR.x * WIDTH > RIGHT_MARGIN_THRESHOLD
               and player.MIDDLE_CHEST_X > RIGHT_MARGIN_THRESHOLD):
             if player.movement != MD_RIGHT:
                 player.movement = MD_RIGHT
-                #player.move_right()
+                player.move_right()
                 print("MOVE RIGHT")
-    else:
-        pass
+
+def check_action(player, action):
+    if action == "l_punch":
+        player.light_punch()
+    elif action == "m_punch":
+        player.medium_punch()
+    elif action == "h_punch":
+        player.heavy_punch()
+def focus_on_application(window_title):
+    try:
+        # Buscar la ventana por título
+        window = gw.getWindowsWithTitle(window_title)
+
+        # Verificar si se encontró la ventana
+        if window:
+            window = window[0]
+            # Activar (poner en primer plano) la ventana
+            window.activate()
+            return True
+        else:
+            print(f"No se encontró la ventana con el título: {window_title}")
+            return False
+    except Exception as e:
+        print(f"Error al enfocar la ventana: {e}")
+        return False
 
 
 if __name__ == '__main__':
