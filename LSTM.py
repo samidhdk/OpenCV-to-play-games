@@ -1,5 +1,3 @@
-import time
-
 import cv2
 import keras.src.distribute.saved_model_test_base
 import numpy as np
@@ -11,7 +9,21 @@ from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 from keras.callbacks import TensorBoard
 from collections import deque
+from Player import Player
 import tensorflow as tf
+
+WIDTH = 640
+HEIGHT = 480
+
+LEFT_MARGIN_THRESHOLD = int(WIDTH * (1 / 3))
+RIGHT_MARGIN_THRESHOLD = int(WIDTH * (2 / 3))
+CROUCH_THRESHOLD = 260
+STAND_THRESHOLD = int(HEIGHT * 0.75)
+JUMP_THRESHOLD = int(HEIGHT * 0.9)
+# Movement Direction
+MD_STAND = 0
+MD_LEFT = 1
+MD_RIGHT = 2
 
 MODEL = "relu-15-frames.keras"
 
@@ -96,20 +108,13 @@ def mp_detection(img, model):
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     return img, results
 
-
 def extract_keypoints(results):
     if results.pose_landmarks:
         pose_array = np.array(
             [[res.x, res.y, res.z, res.visibility] if res.visibility > 0.9 else [0, 0, 0, 0] for res in
              results.pose_landmarks.landmark]).flatten()
-        # vis_arr = np.array(
-        #    [[res.visibility] if res.visibility > 0.9 else [0] for res in results.pose_landmarks.landmark]).flatten()
     else:
         pose_array = np.zeros(33 * 4)
-        # vis_arr = np.zeros(33 * 4)
-
-    # a = sum(1 for elem in vis_arr if elem > 0)
-    # print(a)
     return pose_array
 
 
@@ -134,13 +139,6 @@ def process_data():
     y = to_categorical(labels).astype(int)
 
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
-    print(np.shape(x_train))
-    print("##############")
-    print(np.shape(x_test))
-    print("##############")
-    print(np.shape(y_train))
-    print("##############")
-    print(np.shape(y_test))
     return x_train, x_test, y_train, y_test
 
 
@@ -169,47 +167,63 @@ def create_data_folders():
 
 
 def test():
+    player = Player(HEIGHT=HEIGHT, WIDTH=WIDTH)
     sequence = deque(maxlen=sequences_length)
     threshold = 0.95
-    video = cv2.VideoCapture(1)
+    video = cv2.VideoCapture(0)
     model = keras.models.load_model(MODEL)  # action.keras, relu-sigmoid.keras
     with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose_model:
         while True:
 
             ret, frame = video.read()
             frame = cv2.flip(frame, 1)
-
             # Make detections
             image, results = mp_detection(frame, pose_model)
 
-            # Draw landmarks
-            draw_landmarks(image, results)
+            if results.pose_landmarks is not None:
+                # Lines of reference
+                cv2.line(image, (0, CROUCH_THRESHOLD), (WIDTH, CROUCH_THRESHOLD), (255, 255, 0), 2)
+                cv2.line(image, (0, JUMP_THRESHOLD), (WIDTH, JUMP_THRESHOLD), (0, 255, 255), 2)
+                cv2.line(image, (LEFT_MARGIN_THRESHOLD, 0), (LEFT_MARGIN_THRESHOLD, HEIGHT), (0, 0, 255), 2)
+                cv2.line(image, (RIGHT_MARGIN_THRESHOLD, 0), (RIGHT_MARGIN_THRESHOLD, HEIGHT), (0, 0, 255), 2)
 
-            # Predict logic
-            keypoints = extract_keypoints(results)
-            if sum(keypoints) != 0:
-                sequence.append(keypoints)
-                print(len(sequence))
+                player.update(landmarks=results.pose_landmarks.landmark)
 
-                if len(sequence) == sequences_length:
 
-                    res = model.predict(np.expand_dims(sequence, axis=0))[0]
+                # Draw landmarks
+                cv2.circle(image, (player.MIDDLE_CHEST_X, player.MIDDLE_CHEST_Y), radius=3, color=(0, 0, 255),
+                           thickness=3)
+                draw_landmarks(image, results)
 
-                    for i, action in enumerate(actions):
-                        confidence = res[i] * 100
-                        print(f"Acción: {action}, Confianza: {confidence:.2f}%")
-                    # print(res, res[np.argmax(res)], actions[np.argmax(res)], np.argmax(res))
 
-                    if res[np.argmax(res)] > threshold:
-                        respuesta = str(actions[np.argmax(res)])
-                        media.append(np.argmax(res))
-                        print(np.argmax(res), media)
-                    else:
-                        respuesta = ""
+                # Predict logic
+                keypoints = extract_keypoints(results)
+                check_stance(player)
+                detect_pose(player)
+                if sum(keypoints) != 0 and player.movement == 0 and player.STANCE == 0:
 
-                    cv2.rectangle(image, (0, 0), (320, 40), (245, 117, 16), -1)
-                    cv2.putText(image, respuesta, (3, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                    sequence.append(keypoints)
+                    print(len(sequence))
+
+                    if len(sequence) == sequences_length:
+
+                        res = model.predict(np.expand_dims(sequence, axis=0))[0]
+
+                        for i, action in enumerate(actions):
+                            confidence = res[i] * 100
+                            print(f"Acción: {action}, Confianza: {confidence:.2f}%")
+                        # print(res, res[np.argmax(res)], actions[np.argmax(res)], np.argmax(res))
+
+                        if res[np.argmax(res)] > threshold:
+                            respuesta = str(actions[np.argmax(res)])
+
+
+                        else:
+                            respuesta = ""
+
+                        cv2.rectangle(image, (0, 0), (320, 40), (245, 117, 16), -1)
+                        cv2.putText(image, respuesta, (3, 30),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
             cv2.imshow('LSTM', image)
 
@@ -217,6 +231,68 @@ def test():
                 break
         video.release()
         cv2.destroyAllWindows()
+
+def check_stance(player):
+    if player.R_SHOULDER.y * HEIGHT > CROUCH_THRESHOLD and player.L_SHOULDER.y * HEIGHT > CROUCH_THRESHOLD:
+        print("CROUCHING!")
+        if player.STANCE != 1:
+            player.STANCE = 1
+            #player.crouch()
+
+    elif player.R_KNEE.y * HEIGHT < HEIGHT * 0.9 and player.L_KNEE.y * HEIGHT < HEIGHT * 0.9:
+    #elif player.MIDDLE_CHEST_Y < int(JUMP_THRESHOLD - 300):
+        print("JUMPING!")
+        if player.STANCE != 2:
+            player.STANCE = 2
+            #player.jump()
+    else:
+        print("NEUTRAL!")
+        if player.STANCE != 0:
+            player.STANCE = 0
+            #player.neutral()
+
+def detect_pose(player):
+    # neutral stance
+    if player.STANCE == 0:
+        """
+        if player.R_ELBOW.y < player.R_SHOULDER.y and player.L_ELBOW.y < player.L_SHOULDER.y:
+            print("HEAVY PUNCH!")
+            player.heavy_punch()
+
+        elif (
+                int(player.L_SHOULDER.y * 0.9) < player.L_ELBOW.y < int(
+            player.L_SHOULDER.y * 1.1) or player.L_ELBOW.y < player.L_SHOULDER.y) and (
+                player.L_ELBOW.y < player.R_ELBOW.y):
+            print("LIGHT PUNCH!")
+            player.light_punch()
+        elif (
+                int(player.R_SHOULDER.y * 0.9) < player.R_ELBOW.y < int(
+            player.R_SHOULDER.y * 1.1) or player.R_ELBOW.y < player.R_SHOULDER.y) and (
+                player.R_ELBOW.y < player.L_ELBOW.y):
+            print("MEDIUM PUNCH!")
+            player.medium_punch()
+        """
+        if (LEFT_MARGIN_THRESHOLD < player.L_EAR.x * WIDTH < player.R_EAR.x * WIDTH < RIGHT_MARGIN_THRESHOLD
+              and LEFT_MARGIN_THRESHOLD < player.MIDDLE_CHEST_X < RIGHT_MARGIN_THRESHOLD):
+            if player.movement != MD_STAND:
+                player.movement = MD_STAND
+                #player.stand()
+                print("STAND")
+
+        elif (player.L_EAR.x * WIDTH < player.R_EAR.x * WIDTH < LEFT_MARGIN_THRESHOLD
+              and player.MIDDLE_CHEST_X < LEFT_MARGIN_THRESHOLD):
+            if player.movement != MD_LEFT:
+                player.movement = MD_LEFT
+                #player.move_left()
+                print("MOVE LEFT")
+        elif (player.R_EAR.x * WIDTH > player.L_EAR.x * WIDTH > RIGHT_MARGIN_THRESHOLD
+              and player.MIDDLE_CHEST_X > RIGHT_MARGIN_THRESHOLD):
+            if player.movement != MD_RIGHT:
+                player.movement = MD_RIGHT
+                #player.move_right()
+                print("MOVE RIGHT")
+    else:
+        pass
 
 
 if __name__ == '__main__':
