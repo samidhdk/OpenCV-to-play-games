@@ -1,5 +1,7 @@
-# Work in progress
-Using a LSTM model is ruining my mental health.
+# Final update
+~Using a LSTM model is ruining my mental health.~
+
+I drop this project. The base is not even well structured. Deep Learning is not my field for sure.
 
 ## Some context
 The main idea is to simulate something like Xbox Kinect. 
