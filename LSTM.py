@@ -163,20 +163,6 @@ def train_LSTM():
     model.fit(x_train, y_train, epochs=35, callbacks=tb_callback) # 105
     model.save(MODEL)
 
-    """
-    x_train, _, y_train, _ = process_data()
-    model = Sequential()
-    model.add(LSTM(32, return_sequences=True, activation='relu', input_shape=(sequences_length, 132)))  # 132 = 33* 4 (x,y,z,vis)
-    model.add(LSTM(64, return_sequences=True, activation='relu'))
-    model.add(LSTM(32, return_sequences=False, activation='relu'))
-    model.add(Dense(32, activation='relu'))  # original relu
-    model.add(Dense(16, activation='relu'))  # original relu
-    model.add(Dense(actions.shape[0], activation='softmax'))
-    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-    model.fit(x_train, y_train, epochs=50, callbacks=tb_callback) # 105
-    model.save(MODEL)
-    """
-
 
 
 def confusion_matrix():
@@ -317,13 +303,11 @@ def check_action(player, action):
 
 def focus_on_application(window_title):
     try:
-        # Buscar la ventana por título
         window = gw.getWindowsWithTitle(window_title)
 
         # Verificar si se encontró la ventana
         if window:
             window = window[0]
-            # Activar (poner en primer plano) la ventana
             window.activate()
             return True
         else:
@@ -341,101 +325,7 @@ def create_data_folders():
             except:
                 pass
 
-def draw_plot():
-    y_plot = []
-    x_plot = list(range(0, 1000))
-    for i in range(0, 1000):
-        y_plot.append(confusion_matrix())
-    import matplotlib.pyplot as plt
 
-    plt.plot(x_plot, y_plot)
-    plt.show()
-
-def generate_data_augmentation_pos():
-
-    variability_range = 10
-    """
-    Quiero 20, 10 positivos y 10 negativos, la variabilidad va desde 0.10 - 0.20, y de -0.1 -  -0.2
-    
-    Cómo se va a hacer:
-    
-        Para cada video se va a generar 20 diferentes (variability range x2 (pos y neg))
-        
-        Entonces:
-            - Se comienza con una acción [h_punch, idl, fuego, kick]
-            - Se accede al primer video
-            - Se debe seleccionar una variabilidad, se comienza por 0.1
-                - Se crean 20 nuevas carpetas (20 x variabilidad(pos, neg))
-                    - En la carpeta 30 se debe:
-                        - coger el valor del primer video (0), ir al primer frame y sumarle esa cantidad, se guarda en 30/0
-                        - se realiza para todas, obteniendo un 30/[0-29]
-                    - En la carpeta 31 se debe:
-                        - coger el valor del primer video (1), ir al primer frame y sumarle esa cantidad, se guarda en 30/0
-            
-        
-        
-    
-    """
-
-
-    #Positives
-    for action in actions: # h_punch, fire, idle, tbd
-        n_variability = 0.1
-        dir_number = -1
-        for i in range(variability_range):  # 0, 9
-            n_variability += 0.01
-            for number in range(no_sequences): # 0,29 Numero del video
-                dir_number += 1
-                os.makedirs(os.path.join(DATA_PATH, action, str(dir_number + no_sequences)))
-                for frame in range(no_sequences):  # 0,29 Numero del frame
-                    lpath = os.path.join(DATA_PATH, action, str(number), f"{frame}.npy")
-                    print(lpath)
-
-                    data = np.load(lpath)
-                    random_values = np.full(data.shape, n_variability)
-
-                    # Filtra los elementos en los que el valor original es distinto de cero
-
-                    nonzero_indices = data != 0
-
-                    # Aplica la perturbación solo en los elementos diferentes de cero
-
-                    syntethic_data = data.copy()  # Copia los datos originales
-                    syntethic_data[nonzero_indices] += random_values[nonzero_indices]
-                    syntethic_data_path = os.path.join(DATA_PATH, action, str(dir_number+no_sequences), f"{frame}.npy")
-
-                    np.save(syntethic_data_path, syntethic_data)
-
-
-def generate_data_augmentation_neg():
-    #Negatives
-    variability_range = 10
-    for action in actions: # h_punch, fire, idle, tbd
-        n_variability = 0.1
-        dir_number = -1
-        for i in range(variability_range):  # 0, 9
-            n_variability -= 0.01
-            for number in range(no_sequences): # 0,29 Numero del video
-                dir_number += 1
-                os.makedirs(os.path.join(DATA_PATH, action, str(dir_number + no_sequences+300)))
-                for frame in range(no_sequences):  # 0,29 Numero del frame
-                    lpath = os.path.join(DATA_PATH, action, str(number), f"{frame}.npy")
-                    print(lpath)
-
-                    data = np.load(lpath)
-                    random_values = np.full(data.shape, n_variability)
-
-                    # Filtra los elementos en los que el valor original es distinto de cero
-
-                    nonzero_indices = data != 0
-
-                    # Aplica la perturbación solo en los elementos diferentes de cero
-
-                    syntethic_data = data.copy()  # Copia los datos originales
-                    syntethic_data[nonzero_indices] += random_values[nonzero_indices]
-                    syntethic_data_path = os.path.join(DATA_PATH, action, str(dir_number+no_sequences+no_synth_data), f"{frame}.npy")
-
-                    np.save(syntethic_data_path, syntethic_data)
 
 
 if __name__ == '__main__':
